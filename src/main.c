@@ -27,7 +27,7 @@
 #include <string.h>
 #include "xmem.h"
 
-#define STRINGS_EQUAL(a, b, len_b) strncmp(a, b, len_b) == 0
+#define STRINGS_EQUAL(a, b, len_a, len_b) len_a == len_b && strncmp(a, b, len_b) == 0
 #define PRINT_TO_STDERR(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__)
 #define PRINT_TO_STDERR_NOARGS(fmt) fprintf(stderr, fmt)
 
@@ -84,7 +84,7 @@ input_buffer_t* new_input_buffer(void)
 meta_cmd_result_t exec_meta_cmd(input_buffer_t* in)
 {
     const char* exit_cmd = ".exit";
-    if (STRINGS_EQUAL(exit_cmd, in->buf, strlen(in->buf))) {
+    if (STRINGS_EQUAL(exit_cmd, in->buf, strlen(in->buf), strlen(exit_cmd))) {
         close_input_buffer(in);
         exit(EXIT_SUCCESS);
     }
@@ -96,11 +96,11 @@ prepare_result_t prepare_statement(input_buffer_t* in, statement* st)
 {
     const char* st_insert = "insert";
     const char* st_select = "select";
-    if (STRINGS_EQUAL(st_insert, in->buf, strlen(in->buf))) {
+    if (STRINGS_EQUAL(st_insert, in->buf, strlen(in->buf), strlen(st_insert))) {
         st->type = STATEMENT_INSERT;
         return PREPARE_SUCCESS;
     }
-    if (STRINGS_EQUAL(st_select, in->buf, strlen(in->buf))) {
+    if (STRINGS_EQUAL(st_select, in->buf, strlen(in->buf), strlen(st_select))) {
         st->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
     }
