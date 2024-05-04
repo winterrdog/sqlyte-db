@@ -156,6 +156,10 @@ void run_repl(void)
         print_prompt();
         read_input(user_input);
 
+        if (!user_input->buf[0]) {
+            continue;
+        }
+
         // is it a meta command
         if (user_input->buf[0] == '.') {
             switch (exec_meta_cmd(user_input)) {
