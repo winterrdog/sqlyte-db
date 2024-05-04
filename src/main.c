@@ -134,7 +134,7 @@ int read_input(input_buffer_t* in)
 
     in->input_len = bytes_read - 1;
 
-    // remove trailing line
+    // remove trailing new-line feed
     in->buf[bytes_read - 1] = 0;
 
     return 0;
