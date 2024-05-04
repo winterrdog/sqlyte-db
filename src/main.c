@@ -125,20 +125,19 @@ void print_prompt(void)
     printf("lyt-db > ");
 }
 
-void read_input(input_buffer_t* in)
+int read_input(input_buffer_t* in)
 {
     ssize_t bytes_read = getline(&in->buf, &in->buf_len, stdin);
     if (bytes_read < 0) {
-        perror("error reading user input: ");
-        return;
-    } else if (!bytes_read) {
-        return;
+        return -1;
     }
 
     in->input_len = bytes_read - 1;
 
     // remove trailing line
     in->buf[bytes_read - 1] = 0;
+
+    return 0;
 }
 
 void close_input_buffer(input_buffer_t* in)
@@ -154,7 +153,10 @@ void run_repl(void)
     // make a REPL
     do {
         print_prompt();
-        read_input(user_input);
+        int ret = read_input(user_input);
+        if (ret < 0) {
+            return;
+        }
 
         if (!user_input->buf[0]) {
             continue;
