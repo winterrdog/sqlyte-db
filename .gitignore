@@ -6,6 +6,7 @@
 *.ko
 *.obj
 *.elf
+sqlyte
 
 # Linker output
 *.ilk
@@ -15,6 +16,9 @@
 # Precompiled Headers
 *.gch
 *.pch
+
+# Vim swap files
+*.swp
 
 # Libraries
 *.lib
