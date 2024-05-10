@@ -46,8 +46,8 @@ typedef unsigned char u8;
 */
 typedef struct {
     u32 id;
-    char username[COLUMN_USERNAME_SIZE];
-    char email[COLUMN_EMAIL_SIZE];
+    char username[COLUMN_USERNAME_SIZE + 1];
+    char email[COLUMN_EMAIL_SIZE + 1];
 } row_t;
 
 // schema field sizes
@@ -86,18 +86,20 @@ typedef enum {
 typedef enum {
     PREPARE_SUCCESS = 0,
     PREPARE_SYNTAX_ERROR,
+    PREPARE_NEGATIVE_ID,
+    PREPARE_STRING_TOO_LONG,
     PREPARE_UNRECOGNIZED_STATEMENT
 } prepare_result_t;
 typedef enum {
     EXECUTE_SUCCESS = 0,
-    EXECUTE_TABLE_FULL,
+    EXECUTE_TABLE_FULL
 } execute_result_t;
 
 // type for all actual SQL statements used in our SQL database
 // e.g. SELECT or INSERT
 typedef enum {
     STATEMENT_INSERT = 0,
-    STATEMENT_SELECT,
+    STATEMENT_SELECT
 } statement_t;
 typedef struct {
     statement_t type;
@@ -214,25 +216,47 @@ meta_cmd_result_t exec_meta_cmd(input_buffer_t* in, table_t* t)
     return META_CMD_UNRECOGNIZED_CMD;
 }
 
+prepare_result_t prepare_insert(input_buffer_t* in, statement* st)
+{
+    st->type = STATEMENT_INSERT;
+
+    char* keyword = strtok(in->buf, " ");
+    char* curr_id = strtok(NULL, " ");
+    char* username = strtok(NULL, " ");
+    char* email = strtok(NULL, " ");
+    if (!curr_id || !username || !email) {
+        return PREPARE_SYNTAX_ERROR;
+    }
+
+    int id = atoi(curr_id);
+    if (id < 0) {
+        return PREPARE_NEGATIVE_ID;
+    }
+    if (strlen(username) > COLUMN_USERNAME_SIZE) {
+        return PREPARE_STRING_TOO_LONG;
+    }
+    if (strlen(email) > COLUMN_EMAIL_SIZE) {
+        return PREPARE_STRING_TOO_LONG;
+    }
+
+    st->row_to_insert.id = id,
+    strcpy(st->row_to_insert.username, username),
+    strcpy(st->row_to_insert.email, email);
+
+    return PREPARE_SUCCESS;
+}
+
 prepare_result_t prepare_statement(input_buffer_t* in, statement* st)
 {
     const char* st_insert = "insert";
     const char* st_select = "select";
     if (!strncmp(st_insert, in->buf, strlen(st_insert))) {
-        st->type = STATEMENT_INSERT;
-        int args_assigned
-            = sscanf(in->buf, "insert %d %31s %254s", &(st->row_to_insert.id),
-                &(st->row_to_insert.username), &(st->row_to_insert.email));
-        if (args_assigned < 3) {
-            return PREPARE_SYNTAX_ERROR;
-        }
-        return PREPARE_SUCCESS;
+        return prepare_insert(in, st);
     }
     if (!strcmp(st_select, in->buf)) {
         st->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
     }
-
     return PREPARE_UNRECOGNIZED_STATEMENT;
 }
 
@@ -326,11 +350,17 @@ void run_repl(void)
         case PREPARE_SUCCESS:
             break;
         case PREPARE_SYNTAX_ERROR:
-            PRINT_TO_STDERR_NOARGS("syntax error. could not parse statement\n");
+            PRINT_TO_STDERR_NOARGS("syntax error. could not parse statement.\n");
             continue;
         case PREPARE_UNRECOGNIZED_STATEMENT:
-            PRINT_TO_STDERR(
+            printf(
                 "unrecognized keyword at start of '%s'.\n", user_input->buf);
+            continue;
+        case PREPARE_NEGATIVE_ID:
+            printf("id must be non-negative.\n");
+            continue;
+        case PREPARE_STRING_TOO_LONG:
+            printf("string is too long.\n");
             continue;
         }
 
@@ -339,7 +369,7 @@ void run_repl(void)
             printf("executed.\n");
             break;
         case EXECUTE_TABLE_FULL:
-            PRINT_TO_STDERR_NOARGS("error: table's full.\n");
+            printf("error: table's full.\n");
             break;
         }
     } while (1);
