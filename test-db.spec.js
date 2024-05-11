@@ -1,8 +1,14 @@
 const { execSync } = require("child_process");
 
 describe("database", function () {
+  beforeEach(function () {
+    execSync("rm -f test.db");
+  });
+
   const runScript = (commands) => {
-    const childProcess = execSync("./sqlyte", { input: commands.join("\n") });
+    const childProcess = execSync("./sqlyte test.db", {
+      input: commands.join("\n"),
+    });
     const rawOutput = childProcess.toString();
     return rawOutput.split("\n");
   };
@@ -83,5 +89,26 @@ describe("database", function () {
     ];
     const result = runScript(commands);
     expect(result).toStrictEqual(commandsExpectedResult);
+  });
+
+  it("keeps data even after closing connection", function () {
+    {
+      const commands = ["insert 1 user1 person1@example.com", ".exit\n"];
+      const commandsExpectedResult = ["lyt-db> executed.", "lyt-db> "];
+      const result = runScript(commands);
+      expect(result).toStrictEqual(commandsExpectedResult);
+    }
+
+    // reopen program after an exit
+    {
+      const commands = ["select", ".exit\n"];
+      const commandsExpectedResult = [
+        "lyt-db> ( 1, user1, person1@example.com )",
+        "executed.",
+        "lyt-db> ",
+      ];
+      const result = runScript(commands);
+      expect(result).toStrictEqual(commandsExpectedResult);
+    }
   });
 });

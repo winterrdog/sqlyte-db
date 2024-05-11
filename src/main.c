@@ -21,10 +21,13 @@
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
 */
+#include <errno.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "xmem.h"
 
 #define PRINT_TO_STDERR(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__)
@@ -40,6 +43,15 @@
 
 typedef unsigned int u32;
 typedef unsigned char u8;
+
+/*
+    used by database to interact with filesystem and memory
+*/
+typedef struct {
+    int fd;
+    u32 file_len;
+    void* pages[TABLE_MAX_PAGES];
+} pager_t;
 
 /*
     hard-coded schema type/shape
@@ -90,17 +102,11 @@ typedef enum {
     PREPARE_STRING_TOO_LONG,
     PREPARE_UNRECOGNIZED_STATEMENT
 } prepare_result_t;
-typedef enum {
-    EXECUTE_SUCCESS = 0,
-    EXECUTE_TABLE_FULL
-} execute_result_t;
+typedef enum { EXECUTE_SUCCESS = 0, EXECUTE_TABLE_FULL } execute_result_t;
 
 // type for all actual SQL statements used in our SQL database
 // e.g. SELECT or INSERT
-typedef enum {
-    STATEMENT_INSERT = 0,
-    STATEMENT_SELECT
-} statement_t;
+typedef enum { STATEMENT_INSERT = 0, STATEMENT_SELECT } statement_t;
 typedef struct {
     statement_t type;
     row_t row_to_insert; // only used by "INSERT"
@@ -112,7 +118,7 @@ const u32 ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
 const u32 TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 typedef struct {
     u32 row_count;
-    void* pages[TABLE_MAX_PAGES];
+    pager_t* pager;
 } table_t;
 
 // function prototypes
@@ -121,6 +127,42 @@ void close_input_buffer(input_buffer_t* in);
 void print_row(row_t* r)
 {
     printf("( %d, %s, %s )\n", r->id, r->username, r->email);
+}
+
+void* get_page(pager_t* pager, u32 page_num)
+{
+    if (page_num > TABLE_MAX_PAGES) {
+        printf("tried to fetch a page out of bounds. %d > %d\n", page_num,
+            TABLE_MAX_PAGES);
+        exit(EXIT_FAILURE);
+    }
+    if (!pager->pages[page_num]) {
+        // cache miss. allocate memory and load from file
+        void* page = xmalloc(PAGE_SIZE);
+        u32 num_pages = pager->file_len / PAGE_SIZE;
+
+        // we might hv saved a partial page at the end of file
+        if (pager->file_len % PAGE_SIZE != 0) {
+            num_pages++;
+        }
+
+        // fetch page from file
+        if (page_num <= num_pages) {
+            off_t off = lseek(pager->fd, page_num * PAGE_SIZE, SEEK_SET);
+            if (off < 0) {
+                printf("failed to reposition for the current page.\n");
+                exit(EXIT_FAILURE);
+            }
+            ssize_t bytes_read = read(pager->fd, page, PAGE_SIZE);
+            if (bytes_read < 0) {
+                printf("failed to read in data from file: %d\n", errno);
+                exit(EXIT_FAILURE);
+            }
+        }
+        pager->pages[page_num] = page;
+    }
+
+    return pager->pages[page_num];
 }
 
 void serialize_row(row_t* src, void* dest)
@@ -150,40 +192,97 @@ void deserialize_row(void* src, row_t* dest)
 void* row_slot(table_t* table, u32 row_num)
 {
     u32 page_num = row_num / ROWS_PER_PAGE;
-    void* page = table->pages[page_num];
-    if (!page) {
-        // allocate memory only wen we try to access the page
-        page = xmalloc(PAGE_SIZE);
-        table->pages[page_num] = page;
-    }
+    void* page = get_page(table->pager, page_num);
     u32 row_offset = row_num % ROWS_PER_PAGE;
     u32 byte_offset = row_offset * ROW_SIZE;
 
     return page + byte_offset;
 }
 
-table_t* new_table()
+pager_t* pager_open(const char* fname)
+{
+    // open file in r/w mode or creating one if not existent
+    // with read & write permissions for current user
+    int fd = open(fname, O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
+    if (fd < 0) {
+        printf("unable to open file, %d.\n", errno);
+        exit(EXIT_FAILURE);
+    }
+
+    // set up pager
+    off_t file_len = lseek(fd, 0, SEEK_END);
+    pager_t* pager = xmalloc(sizeof(pager_t));
+    pager->file_len = file_len, pager->fd = fd;
+    for (u32 i = 0; i != TABLE_MAX_PAGES; ++i) {
+        pager->pages[i] = NULL;
+    }
+
+    return pager;
+}
+
+table_t* db_open(const char* fname)
 {
     table_t* table;
-    u32 i;
+    pager_t* pager;
+    u32 row_count;
 
+    pager = pager_open(fname);
+    row_count = pager->file_len / ROW_SIZE;
     table = xmalloc(sizeof(table_t));
-    table->row_count = 0;
-    for (i = 0; i != TABLE_MAX_PAGES; ++i) {
-        table->pages[i] = NULL;
-    }
+    table->row_count = row_count, table->pager = pager;
 
     return table;
 }
 
-void free_table(table_t* t)
+void pager_flush(pager_t* pager, u32 page_num, u32 size)
 {
-    for (u32 i = 0; i != TABLE_MAX_PAGES; ++i) {
-        if (t->pages[i]) {
-            xfree(t->pages[i]);
+    if (!pager->pages[page_num]) {
+        printf("tried to flush null page\n");
+        exit(EXIT_FAILURE);
+    }
+    off_t offset = lseek(pager->fd, page_num * PAGE_SIZE, SEEK_SET);
+    if (offset < 0) {
+        printf("failed to reposition for the current page, %d.\n", errno);
+        exit(EXIT_FAILURE);
+    }
+    ssize_t bytes_written = write(pager->fd, pager->pages[page_num], size);
+    if (bytes_written < 0) {
+        perror("error writing page cache to disk:");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void db_close(table_t* t)
+{
+    pager_t* pager;
+    void* curr_page;
+    u32 i, num_full_pages, num_additional_rows, page_num;
+
+    pager = t->pager;
+    num_full_pages = t->row_count / ROWS_PER_PAGE;
+    for (i = 0; i != num_full_pages; ++i) {
+        curr_page = pager->pages[i];
+        if (curr_page) {
+            pager_flush(pager, i, PAGE_SIZE);
+            xfree(curr_page);
         }
     }
-    xfree(t);
+
+    // if there's a partial write
+    num_additional_rows = t->row_count % ROWS_PER_PAGE;
+    if (num_additional_rows > 0) {
+        page_num = num_full_pages, curr_page = pager->pages[page_num];
+        if (curr_page) {
+            pager_flush(pager, page_num, num_additional_rows * ROW_SIZE);
+            xfree(curr_page);
+        }
+    }
+    int result = close(pager->fd);
+    if (result < 0) {
+        printf("error closing database.\n");
+        exit(EXIT_FAILURE);
+    }
+    xfree(pager), xfree(t);
 }
 
 input_buffer_t* new_input_buffer(void)
@@ -209,7 +308,7 @@ meta_cmd_result_t exec_meta_cmd(input_buffer_t* in, table_t* t)
     const char* exit_cmd = ".exit";
     if (str_exactly_equal(exit_cmd, in->buf)) {
         close_input_buffer(in);
-        free_table(t);
+        db_close(t);
         exit(EXIT_SUCCESS);
     }
 
@@ -239,8 +338,7 @@ prepare_result_t prepare_insert(input_buffer_t* in, statement* st)
         return PREPARE_STRING_TOO_LONG;
     }
 
-    st->row_to_insert.id = id,
-    strcpy(st->row_to_insert.username, username),
+    st->row_to_insert.id = id, strcpy(st->row_to_insert.username, username),
     strcpy(st->row_to_insert.email, email);
 
     return PREPARE_SUCCESS;
@@ -310,15 +408,11 @@ int read_input(input_buffer_t* in)
     return 0;
 }
 
-void close_input_buffer(input_buffer_t* in)
-{
-    xfree(in->buf);
-    xfree(in);
-}
+void close_input_buffer(input_buffer_t* in) { xfree(in->buf), xfree(in); }
 
-void run_repl(void)
+void run_repl(const char* fname)
 {
-    table_t* table = new_table();
+    table_t* table = db_open(fname);
     input_buffer_t* user_input = new_input_buffer();
 
     // make a REPL
@@ -350,11 +444,11 @@ void run_repl(void)
         case PREPARE_SUCCESS:
             break;
         case PREPARE_SYNTAX_ERROR:
-            PRINT_TO_STDERR_NOARGS("syntax error. could not parse statement.\n");
+            PRINT_TO_STDERR_NOARGS(
+                "syntax error. could not parse statement.\n");
             continue;
         case PREPARE_UNRECOGNIZED_STATEMENT:
-            printf(
-                "unrecognized keyword at start of '%s'.\n", user_input->buf);
+            printf("unrecognized keyword at start of '%s'.\n", user_input->buf);
             continue;
         case PREPARE_NEGATIVE_ID:
             printf("id must be non-negative.\n");
@@ -377,6 +471,11 @@ void run_repl(void)
 
 int main(int argc, char* argv[])
 {
-    run_repl();
+    if (argc < 2) {
+        printf("you must supply a database filename.\n");
+        return EXIT_FAILURE;
+    }
+    const char* fname = argv[1];
+    run_repl(fname);
     return EXIT_SUCCESS;
 }
