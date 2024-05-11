@@ -20,3 +20,11 @@ A relational database like SQLite that can do stuff. It's not a basic one but ra
   ```sh
   ./sqlyte-db
   ```
+
+## Testing
+
+- You can test the database using `node.js`' `jest` like so:
+
+  ```sh
+  jest
+  ```
