@@ -22,6 +22,7 @@
     IN THE SOFTWARE.
 */
 #include "db.h"
+#include "xmem.h"
 
 void print_row(row_t* r)
 {
@@ -88,14 +89,49 @@ void deserialize_row(void* src, row_t* dest)
     memcpy(&(dest->email), src + EMAIL_OFFSET, EMAIL_SIZE);
 }
 
-void* row_slot(table_t* table, u32 row_num)
+cursor_t* table_start(table_t* table)
 {
-    u32 page_num = row_num / ROWS_PER_PAGE;
-    void* page = get_page(table->pager, page_num);
-    u32 row_offset = row_num % ROWS_PER_PAGE;
-    u32 byte_offset = row_offset * ROW_SIZE;
+    cursor_t* cursor;
+
+    cursor = xmalloc(sizeof(cursor_t));
+    cursor->table = table, cursor->row_num = 0,
+    cursor->end_of_table = (table->row_count == 0);
+
+    return cursor;
+}
+
+cursor_t* table_end(table_t* t)
+{
+    cursor_t* cursor;
+
+    cursor = xmalloc(sizeof(cursor_t));
+    cursor->table = t, cursor->row_num = t->row_count,
+    cursor->end_of_table = 0x1;
+
+    return cursor;
+}
+
+void* cursor_value(cursor_t* c)
+{
+    u32 row_num, page_num, row_offset, byte_offset;
+    void* page;
+
+    row_num = c->row_num;
+    page_num = row_num / ROWS_PER_PAGE;
+    row_offset = row_num % ROWS_PER_PAGE;
+    byte_offset = row_offset * ROW_SIZE;
+    page = get_page(c->table->pager, page_num);
 
     return page + byte_offset;
+}
+
+void cursor_advance(cursor_t* c)
+{
+    c->row_num++;
+    if (c->row_num < c->table->row_count) {
+        return;
+    }
+    c->end_of_table = 0x1;
 }
 
 pager_t* pager_open(const char* fname)
@@ -156,6 +192,7 @@ void db_close(table_t* t)
     pager_t* pager;
     void* curr_page;
     u32 i, num_full_pages, num_additional_rows, page_num;
+    int result;
 
     pager = t->pager;
     num_full_pages = t->row_count / ROWS_PER_PAGE;
@@ -176,7 +213,7 @@ void db_close(table_t* t)
             xfree(curr_page);
         }
     }
-    int result = close(pager->fd);
+    result = close(pager->fd);
     if (result < 0) {
         printf("error closing database.\n");
         exit(EXIT_FAILURE);
@@ -263,8 +300,10 @@ execute_result_t exec_insert(statement* st, table_t* t)
         return EXECUTE_TABLE_FULL;
     }
     row_t* new_row = &(st->row_to_insert);
-    serialize_row(new_row, row_slot(t, t->row_count));
+    cursor_t* c = table_end(t);
+    serialize_row(new_row, cursor_value(c));
     t->row_count++;
+    xfree(c);
 
     return EXECUTE_SUCCESS;
 }
@@ -272,10 +311,13 @@ execute_result_t exec_insert(statement* st, table_t* t)
 execute_result_t exec_select(statement* st, table_t* t)
 {
     row_t r;
-    for (u32 i = 0; i != t->row_count; ++i) {
-        deserialize_row(row_slot(t, i), &r);
+    cursor_t* c;
+
+    for (c = table_start(t); !(c->end_of_table); cursor_advance(c)) {
+        deserialize_row(cursor_value(c), &r);
         print_row(&r);
     }
+    xfree(c);
 
     return EXECUTE_SUCCESS;
 }

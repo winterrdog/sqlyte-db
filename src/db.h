@@ -121,6 +121,11 @@ typedef struct {
     u32 row_count;
     pager_t* pager;
 } table_t;
+typedef struct {
+    table_t* table;
+    u32 row_num;
+    u8 end_of_table; // indicates a position one past the last element
+} cursor_t;
 
 // function prototypes
 void close_input_buffer(input_buffer_t* in);
@@ -128,7 +133,10 @@ void print_row(row_t* r);
 void* get_page(pager_t* pager, u32 page_num);
 void serialize_row(row_t* src, void* dest);
 void deserialize_row(void* src, row_t* dest);
-void* row_slot(table_t* table, u32 row_num);
+cursor_t* table_start(table_t* t);
+cursor_t* table_end(table_t* t);
+void cursor_advance(cursor_t* c);
+void* cursor_value(cursor_t* c);
 pager_t* pager_open(const char* fname);
 table_t* db_open(const char* fname);
 void pager_flush(pager_t* pager, u32 page_num, u32 size);
