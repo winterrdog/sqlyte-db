@@ -111,4 +111,61 @@ describe("database", function () {
       expect(result).toStrictEqual(commandsExpectedResult);
     }
   });
+
+  // write a test that inserts 3 rows then reads them back
+  it("inserts and retrieves 3 rows", function () {
+    const commands = [
+      "insert 1 user1 person1@example.com",
+      "insert 2 user2 person2@example.com",
+      "insert 3 user3 person3@example.com",
+      "select",
+      ".exit\n",
+    ];
+    const commandsExpectedResult = [
+      "lyt-db> executed.",
+      "lyt-db> executed.",
+      "lyt-db> executed.",
+      "lyt-db> ( 1, user1, person1@example.com )",
+      "( 2, user2, person2@example.com )",
+      "( 3, user3, person3@example.com )",
+      "executed.",
+      "lyt-db> ",
+    ];
+    const result = runScript(commands);
+    expect(result).toStrictEqual(commandsExpectedResult);
+  });
+
+  // write a test that inserts 3 rows then exits then opens the db and reads them back
+  it("inserts and retrieves 3 rows after reopening", function () {
+    {
+      const commands = [
+        "insert 1 user1 person1@example.com",
+        "insert 2 user2 person2@example.com",
+        "insert 3 user3 person3@example.com",
+        ".exit\n",
+      ];
+      const commandsExpectedResult = [
+        "lyt-db> executed.",
+        "lyt-db> executed.",
+        "lyt-db> executed.",
+        "lyt-db> ",
+      ];
+      const result = runScript(commands);
+      expect(result).toStrictEqual(commandsExpectedResult);
+    }
+
+    // reopen program after an exit
+    {
+      const commands = ["select", ".exit\n"];
+      const commandsExpectedResult = [
+        "lyt-db> ( 1, user1, person1@example.com )",
+        "( 2, user2, person2@example.com )",
+        "( 3, user3, person3@example.com )",
+        "executed.",
+        "lyt-db> ",
+      ];
+      const result = runScript(commands);
+      expect(result).toStrictEqual(commandsExpectedResult);
+    }
+  });
 });
