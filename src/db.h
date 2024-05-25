@@ -51,6 +51,7 @@ typedef unsigned char u8;
 typedef struct {
     int fd;
     u32 file_len;
+    u32 num_pages;
     void* pages[TABLE_MAX_PAGES];
 } pager_t;
 
@@ -118,14 +119,51 @@ const u32 PAGE_SIZE = 4096;
 const u32 ROWS_PER_PAGE = PAGE_SIZE / ROW_SIZE;
 const u32 TABLE_MAX_ROWS = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 typedef struct {
-    u32 row_count;
+    u32 root_page_num;
     pager_t* pager;
 } table_t;
 typedef struct {
     table_t* table;
-    u32 row_num;
+    u32 page_num;
+    u32 cell_num;
     u8 end_of_table; // indicates a position one past the last element
 } cursor_t;
+
+// B -T R E E
+// S P E C I F I C S //
+
+typedef enum { NODE_INTERNAL, NODE_LEAF } node_type_t;
+
+// node header layout
+const u32 NODE_TYPE_SIZE = sizeof(u8);
+const u32 IS_ROOT_SIZE = sizeof(u8);
+const u32 PARENT_POINTER_SIZE = sizeof(u32);
+const u8 COMMON_NODE_HEADER_SIZE
+    = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
+
+// offsets
+const u32 NODE_TYPE_OFFSET = 0x0;
+const u32 IS_ROOT_OFFSET = NODE_TYPE_OFFSET + NODE_TYPE_SIZE;
+const u32 PARENT_POINTER_OFFSET = IS_ROOT_OFFSET + IS_ROOT_SIZE;
+
+// leaf node header layout
+const u32 LEAF_NODE_NUM_CELLS_SIZE = sizeof(u32);
+const u32 LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
+const u32 LEAF_NODE_HEADER_SIZE
+    = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE;
+
+// leaf node body layout
+const u32 LEAF_NODE_KEY_SIZE = sizeof(u32);
+const u32 LEAF_NODE_KEY_OFFSET = 0x0;
+const u32 LEAF_NODE_VALUE_SIZE = ROW_SIZE;
+const u32 LEAF_NODE_VALUE_OFFSET = LEAF_NODE_KEY_OFFSET + LEAF_NODE_KEY_SIZE;
+const u32 LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
+const u32 LEAF_NODE_SPACE_FOR_CELLS = PAGE_SIZE - LEAF_NODE_HEADER_SIZE;
+const u32 LEAF_NODE_MAX_CELLS = LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE;
+
+// E N D
+// O F
+// B - T R E E
 
 // function prototypes
 void close_input_buffer(input_buffer_t* in);
@@ -133,14 +171,17 @@ void print_row(row_t* r);
 void* get_page(pager_t* pager, u32 page_num);
 void serialize_row(row_t* src, void* dest);
 void deserialize_row(void* src, row_t* dest);
-cursor_t* table_start(table_t* t);
-cursor_t* table_end(table_t* t);
+void print_prompt(void);
+int read_input(input_buffer_t* in);
+void run_repl(const char* fname);
 void cursor_advance(cursor_t* c);
 void* cursor_value(cursor_t* c);
+void pager_flush(pager_t* pager, u32 page_num);
+void db_close(table_t* t);
+cursor_t* table_start(table_t* t);
+cursor_t* table_end(table_t* t);
 pager_t* pager_open(const char* fname);
 table_t* db_open(const char* fname);
-void pager_flush(pager_t* pager, u32 page_num, u32 size);
-void db_close(table_t* t);
 input_buffer_t* new_input_buffer(void);
 u8 str_exactly_equal(const char* s1, const char* s2);
 meta_cmd_result_t exec_meta_cmd(input_buffer_t* in, table_t* t);
@@ -149,6 +190,12 @@ prepare_result_t prepare_statement(input_buffer_t* in, statement* st);
 execute_result_t exec_insert(statement* st, table_t* t);
 execute_result_t exec_select(statement* st, table_t* t);
 execute_result_t exec_statement(statement* st, table_t* t);
-void print_prompt(void);
-int read_input(input_buffer_t* in);
-void run_repl(const char* fname);
+void print_constants(void);
+
+// access leaf node fields
+void initialize_leaf_node(void* node);
+u32* leaf_node_num_cells(void* node);
+void* leaf_node_cell(void* node, u32 cell_num);
+u32* leaf_node_key(void* node, u32 cell_num);
+void* leaf_node_value(void* node, u32 cell_num);
+void leaf_node_insert(cursor_t* c, u32 key, row_t* value);

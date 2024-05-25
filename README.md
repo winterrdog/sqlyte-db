@@ -23,7 +23,14 @@ A relational database like SQLite that can do stuff. It's not a basic one but ra
 
 ## Testing
 
-- You can test the database using `node.js`' `jest` like so:
+- Make sure you have `node.js` installed on your machine
+- Also make sure you have `jest` installed _globally_
+
+  ```sh
+  npm install -g jest
+  ```
+
+- Only after is when you can test the database using `node.js`' `jest` like so:
 
   ```sh
   jest

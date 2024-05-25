@@ -1,6 +1,6 @@
 const { execSync } = require("child_process");
 
-describe("database", function () {
+describe("database e2e tests", function () {
   beforeEach(function () {
     execSync("rm -f test.db");
   });
@@ -34,14 +34,18 @@ describe("database", function () {
       let i;
       const result = [];
       const maxTableRows = 1400;
+
       for (i = 0; i != maxTableRows + 0x1; i++) {
         result.push(`insert ${i} user${i} person${i}@example.com`);
       }
+
       result.push(".exit\n");
       return result;
     };
+
+    const commands = createManyEntries();
     const commandsExpectedResult = "lyt-db> error: table's full.";
-    const result = runScript(createManyEntries());
+    const result = runScript(commands);
     expect(result.at(-2)).toEqual(commandsExpectedResult);
   });
 
@@ -112,7 +116,6 @@ describe("database", function () {
     }
   });
 
-  // write a test that inserts 3 rows then reads them back
   it("inserts and retrieves 3 rows", function () {
     const commands = [
       "insert 1 user1 person1@example.com",
@@ -135,7 +138,6 @@ describe("database", function () {
     expect(result).toStrictEqual(commandsExpectedResult);
   });
 
-  // write a test that inserts 3 rows then exits then opens the db and reads them back
   it("inserts and retrieves 3 rows after reopening", function () {
     {
       const commands = [
@@ -167,5 +169,44 @@ describe("database", function () {
       const result = runScript(commands);
       expect(result).toStrictEqual(commandsExpectedResult);
     }
+  });
+
+  it("allows printing out the structure of a one-node btree", function () {
+    const commands = [
+      "insert 3 user3 person3@example.com",
+      "insert 1 user1 person1@example.com",
+      "insert 2 user2 person2@example.com",
+      ".btree",
+      ".exit\n",
+    ];
+    const commandsExpectedResult = [
+      "lyt-db> executed.",
+      "lyt-db> executed.",
+      "lyt-db> executed.",
+      "lyt-db> tree:",
+      "leaf (size 3)",
+      "\t- 0 : 3",
+      "\t- 1 : 1",
+      "\t- 2 : 2",
+      "lyt-db> ",
+    ];
+    const result = runScript(commands);
+    expect(result).toStrictEqual(commandsExpectedResult);
+  });
+
+  it("prints constants", function () {
+    const commands = [".constants", ".exit\n"];
+    const commandsExpectedResult = [
+      "lyt-db> constants:",
+      "ROW_SIZE: 293",
+      "COMMON_NODE_HEADER_SIZE: 6",
+      "LEAF_NODE_HEADER_SIZE: 10",
+      "LEAF_NODE_CELL_SIZE: 297",
+      "LEAF_NODE_SPACE_FOR_CELLS: 4086",
+      "LEAF_NODE_MAX_CELLS: 13",
+      "lyt-db> ",
+    ];
+    const result = runScript(commands);
+    expect(result).toStrictEqual(commandsExpectedResult);
   });
 });
