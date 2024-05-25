@@ -185,9 +185,9 @@ describe("database e2e tests", function () {
       "lyt-db> executed.",
       "lyt-db> tree:",
       "leaf (size 3)",
-      "\t- 0 : 3",
-      "\t- 1 : 1",
-      "\t- 2 : 2",
+      "\t- 0 : 1",
+      "\t- 1 : 2",
+      "\t- 2 : 3",
       "lyt-db> ",
     ];
     const result = runScript(commands);
@@ -206,6 +206,25 @@ describe("database e2e tests", function () {
       "LEAF_NODE_MAX_CELLS: 13",
       "lyt-db> ",
     ];
+    const result = runScript(commands);
+    expect(result).toStrictEqual(commandsExpectedResult);
+  });
+
+  it('prints an error message if "id" is a duplicate', function () {
+    const commands = [
+      "insert 1 user1 person1@example.com",
+      "insert 1 user1 person1@example.com",
+      "select",
+      ".exit\n",
+    ];
+    const commandsExpectedResult = [
+      "lyt-db> executed.",
+      "lyt-db> error: duplicate key.",
+      "lyt-db> ( 1, user1, person1@example.com )",
+      "executed.",
+      "lyt-db> ",
+    ];
+
     const result = runScript(commands);
     expect(result).toStrictEqual(commandsExpectedResult);
   });

@@ -104,7 +104,11 @@ typedef enum {
     PREPARE_STRING_TOO_LONG,
     PREPARE_UNRECOGNIZED_STATEMENT
 } prepare_result_t;
-typedef enum { EXECUTE_SUCCESS = 0, EXECUTE_TABLE_FULL } execute_result_t;
+typedef enum {
+    EXECUTE_SUCCESS = 0,
+    EXECUTE_TABLE_FULL,
+    EXECUTE_DUPLICATE_KEY
+} execute_result_t;
 
 // type for all actual SQL statements used in our SQL database
 // e.g. SELECT or INSERT
@@ -179,7 +183,7 @@ void* cursor_value(cursor_t* c);
 void pager_flush(pager_t* pager, u32 page_num);
 void db_close(table_t* t);
 cursor_t* table_start(table_t* t);
-cursor_t* table_end(table_t* t);
+cursor_t* table_find(table_t* t, u32 key);
 pager_t* pager_open(const char* fname);
 table_t* db_open(const char* fname);
 input_buffer_t* new_input_buffer(void);
@@ -199,3 +203,6 @@ void* leaf_node_cell(void* node, u32 cell_num);
 u32* leaf_node_key(void* node, u32 cell_num);
 void* leaf_node_value(void* node, u32 cell_num);
 void leaf_node_insert(cursor_t* c, u32 key, row_t* value);
+cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key);
+node_type_t get_node_type(void* node);
+void set_node_type(void* node, node_type_t type);
