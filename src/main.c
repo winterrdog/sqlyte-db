@@ -294,7 +294,7 @@ cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key)
     node = get_page(t->pager, page_num);
     num_cells = *leaf_node_num_cells(node);
 
-    c = malloc(sizeof(cursor_t));
+    c = xmalloc(sizeof(cursor_t));
     c->table = t, c->page_num = page_num;
 
     // binary search
