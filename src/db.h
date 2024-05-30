@@ -23,6 +23,7 @@
 */
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,6 +166,26 @@ const u32 LEAF_NODE_CELL_SIZE = LEAF_NODE_KEY_SIZE + LEAF_NODE_VALUE_SIZE;
 const u32 LEAF_NODE_SPACE_FOR_CELLS = PAGE_SIZE - LEAF_NODE_HEADER_SIZE;
 const u32 LEAF_NODE_MAX_CELLS = LEAF_NODE_SPACE_FOR_CELLS / LEAF_NODE_CELL_SIZE;
 
+// leaf node sizes
+const u32 LEAF_NODE_RIGHT_SPLIT_COUNT = (LEAF_NODE_MAX_CELLS + 1) / 2;
+const u32 LEAF_NODE_LEFT_SPLIT_COUNT
+    = (LEAF_NODE_MAX_CELLS + 1) - LEAF_NODE_RIGHT_SPLIT_COUNT;
+
+// internal node header layout
+const u32 INTERNAL_NODE_NUM_KEYS_SIZE = sizeof(u32);
+const u32 INTERNAL_NODE_NUM_KEYS_OFFSET = COMMON_NODE_HEADER_SIZE;
+const u32 INTERNAL_NODE_RIGHT_CHILD_SIZE = sizeof(u32);
+const u32 INTERNAL_NODE_RIGHT_CHILD_OFFSET
+    = INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE;
+const u32 INTERNAL_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE
+    + INTERNAL_NODE_NUM_KEYS_SIZE + INTERNAL_NODE_RIGHT_CHILD_SIZE;
+
+// internal node body layout
+const u32 INTERNAL_NODE_KEY_SIZE = sizeof(u32);
+const u32 INTERNAL_NODE_CHILD_SIZE = sizeof(u32);
+const u32 INTERNAL_NODE_CELL_SIZE
+    = INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE;
+
 // E N D
 // O F
 // B - T R E E
@@ -195,14 +216,32 @@ execute_result_t exec_insert(statement* st, table_t* t);
 execute_result_t exec_select(statement* st, table_t* t);
 execute_result_t exec_statement(statement* st, table_t* t);
 void print_constants(void);
+u32 get_unused_page_num(pager_t* pager);
 
-// access leaf node fields
-void initialize_leaf_node(void* node);
+// general node operations
+void create_new_root(table_t* t, u32 right_child_page_num);
+node_type_t get_node_type(void* node);
+void set_node_type(void* node, node_type_t type);
+bool is_node_root(void* node);
+void set_node_root(void* node, bool is_root);
+u32 get_node_max_key(void* node);
+void indent(u32 level);
+void print_tree(pager_t* pager, u32 page_num, u32 indentation_level);
+
+// access & control leaf node fields
+void init_leaf_node(void* node);
 u32* leaf_node_num_cells(void* node);
 void* leaf_node_cell(void* node, u32 cell_num);
 u32* leaf_node_key(void* node, u32 cell_num);
 void* leaf_node_value(void* node, u32 cell_num);
 void leaf_node_insert(cursor_t* c, u32 key, row_t* value);
 cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key);
-node_type_t get_node_type(void* node);
-void set_node_type(void* node, node_type_t type);
+void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value);
+
+// access and control internal node fields
+void init_internal_node(void* node);
+u32* internal_node_child(void* node, u32 child_num);
+u32* internal_node_right_child(void* node);
+u32* internal_node_cell(void* node, u32 cell_num);
+u32* internal_node_num_keys(void* node);
+u32* internal_node_key(void* node, u32 key_num);

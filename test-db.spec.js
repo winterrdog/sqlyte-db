@@ -39,6 +39,7 @@ describe("database e2e tests", function () {
         result.push(`insert ${i} user${i} person${i}@example.com`);
       }
 
+      result.push(".btree\n");
       result.push(".exit\n");
       return result;
     };
@@ -184,10 +185,10 @@ describe("database e2e tests", function () {
       "lyt-db> executed.",
       "lyt-db> executed.",
       "lyt-db> tree:",
-      "leaf (size 3)",
-      "\t- 0 : 1",
-      "\t- 1 : 2",
-      "\t- 2 : 3",
+      "- leaf (size 3)",
+      " - 1",
+      " - 2",
+      " - 3",
       "lyt-db> ",
     ];
     const result = runScript(commands);
@@ -226,6 +227,41 @@ describe("database e2e tests", function () {
     ];
 
     const result = runScript(commands);
+    expect(result).toStrictEqual(commandsExpectedResult);
+  });
+
+  it("allows printing out the structure of a 3 leaf-node btree", function () {
+    const commands = [];
+    let rows = 15;
+    for (let i = 1; i != rows; i++) {
+      commands.push(`insert ${i} user${i} person${i}@example.com`);
+    }
+
+    commands.push(".btree", ".exit\n");
+    const commandsExpectedResult = [
+      "lyt-db> tree:",
+      "- internal (size 1)",
+      " - leaf (size 7)",
+      "  - 1",
+      "  - 2",
+      "  - 3",
+      "  - 4",
+      "  - 5",
+      "  - 6",
+      "  - 7",
+      " - key 7",
+      " - leaf (size 7)",
+      "  - 8",
+      "  - 9",
+      "  - 10",
+      "  - 11",
+      "  - 12",
+      "  - 13",
+      "  - 14",
+      "lyt-db> ",
+    ];
+
+    const result = runScript(commands).slice(14);
     expect(result).toStrictEqual(commandsExpectedResult);
   });
 });
