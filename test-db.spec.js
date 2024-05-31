@@ -9,7 +9,16 @@ describe("database e2e tests", function () {
     let childProcess, rawOutput;
 
     try {
-      childProcess = execSync("./sqlyte test.db", {
+      let exec_cmd;
+
+      if (process.env.DEBUG === "true") {
+        exec_cmd =
+          "valgrind --leak-check=full --track-origins=yes ./sqlyte test.db";
+      } else {
+        exec_cmd = "./sqlyte test.db";
+      }
+
+      childProcess = execSync(exec_cmd, {
         input: commands.join("\n"),
       });
       rawOutput = childProcess.toString();

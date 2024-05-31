@@ -27,6 +27,7 @@
 
     - winterrdog: readapted xstrdup()
     - winterrdog: added xfree()
+    - winterrdog: added xfree_all()
 
 */
 
@@ -44,38 +45,114 @@ void* xmalloc(size_t size);
 void* xcalloc(size_t nmemb, size_t size);
 void* xrealloc(void* ptr, size_t size);
 void xfree(void* p);
+void xfree_all(void);
+void free_mem(void* p);
 const char* xstrdup(const char* s);
 
+/*
+** Header on the linked list of memory allocations.
+*/
+typedef struct mem_blk_hdr mem_blk_hdr_t;
+struct mem_blk_hdr {
+    mem_blk_hdr_t* next_blk;
+    size_t blk_size;
+    /* actual memory block comes next, right here! */
+};
+
+/*
+** Global "singly-linked" list of all memory allocations.
+*/
+static mem_blk_hdr_t* allocated_memory_list = NULL;
+
+/*
+** Wrappers around malloc(), calloc(), realloc() and free().
+**
+** All memory allocations are kept on a SINGLY-linked list.  The
+** xfree_all() function can be called prior to exit to clean
+** up any memory leaks.
+**
+** This is not needed but compilers and getting increasingly
+** noisy about memory leaks. So this code is provided to hush the
+** warnings.
+*/
 static void* xmalloc_fatal(size_t size)
 {
     if (size == 0)
         return NULL;
-    fprintf(stderr, "Out of memory. exiting..!\n");
+
+    // free all memory allocations
+    xfree_all();
+
+    fprintf(stderr, "Out of memory. Failed to allocate %zd bytes. exiting..!\n",
+        size);
     exit(1);
+}
+
+static inline mem_blk_hdr_t* get_mem_block_header(void* ptr)
+{
+    return (((mem_blk_hdr_t*)ptr) - 1);
+}
+
+void free_mem(void* ptr)
+{
+    if (ptr) {
+        free(ptr);
+        ptr = NULL;
+    }
 }
 
 void* xmalloc(size_t size)
 {
-    void* ptr = malloc(size);
-    if (ptr)
-        return ptr;
-    return xmalloc_fatal(size);
+    mem_blk_hdr_t* new_blk;
+    size_t needed_space;
+
+    if (size < 0) {
+        return NULL;
+    }
+
+    needed_space = size + sizeof(mem_blk_hdr_t);
+    new_blk = (mem_blk_hdr_t*)malloc(needed_space);
+    if (!new_blk) {
+        return xmalloc_fatal(size);
+    }
+
+    new_blk->next_blk = allocated_memory_list;
+    new_blk->blk_size = size;
+    allocated_memory_list = new_blk;
+
+    return (void*)(new_blk + 1);
 }
 
 void* xcalloc(size_t nmemb, size_t size)
 {
-    void* ptr = calloc(nmemb, size);
-    if (ptr)
-        return ptr;
-    return xmalloc_fatal(nmemb * size);
+    void* new_blk;
+    size_t needed_space;
+
+    needed_space = nmemb * size;
+    new_blk = xmalloc(needed_space);
+    memset(new_blk, 0x0, needed_space);
+
+    return new_blk;
 }
 
-void* xrealloc(void* ptr, size_t size)
+void* xrealloc(void* old_ptr, size_t size)
 {
-    void* p = realloc(ptr, size);
-    if (p)
-        return p;
-    return xmalloc_fatal(size);
+    void* new_blk;
+    mem_blk_hdr_t* blk_hdr;
+
+    if (!old_ptr) {
+        return xmalloc(size);
+    }
+
+    blk_hdr = get_mem_block_header(old_ptr);
+    if (blk_hdr->blk_size >= size) {
+        return old_ptr;
+    }
+
+    new_blk = xmalloc(size);
+    memcpy(new_blk, old_ptr, blk_hdr->blk_size);
+
+    return new_blk;
 }
 
 const char* xstrdup(const char* src)
@@ -88,10 +165,21 @@ const char* xstrdup(const char* src)
     return (const char*)dest;
 }
 
-void xfree(void* p)
+// make sure u free memory allocated by xmalloc, xcalloc, xrealloc
+void xfree(void* old_blk)
 {
-    if (p) {
-        free(p), p = NULL;
+    if (old_blk) {
+        mem_blk_hdr_t* blk_hdr = get_mem_block_header(old_blk);
+        memset(old_blk, 0, blk_hdr->blk_size);
+    }
+}
+
+void xfree_all(void)
+{
+    for (mem_blk_hdr_t* next_blk = NULL; allocated_memory_list != NULL;
+         allocated_memory_list = next_blk) {
+        next_blk = allocated_memory_list->next_blk;
+        free_mem(allocated_memory_list);
     }
 }
 

@@ -217,6 +217,7 @@ execute_result_t exec_select(statement* st, table_t* t);
 execute_result_t exec_statement(statement* st, table_t* t);
 void print_constants(void);
 u32 get_unused_page_num(pager_t* pager);
+void exit_db(int status);
 
 // general node operations
 void create_new_root(table_t* t, u32 right_child_page_num);
