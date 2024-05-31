@@ -350,7 +350,7 @@ cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key)
     // binary search with "half-open" interval i.e. [low, high)
     low = 0x0;
     high = num_cells;
-    while (high > low) {
+    while (high != low) {
         mid = low + ((high - low) / 2);
         key_at_mid = *leaf_node_key(node, mid);
 
