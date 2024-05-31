@@ -72,7 +72,7 @@ static mem_blk_hdr_t* allocated_memory_list = NULL;
 ** up any memory leaks.
 **
 ** This is not needed but compilers and getting increasingly
-** noisy about memory leaks. So this code is provided to hush the
+** noisy about memory leaks. So this code is provided to hush them
 ** warnings.
 */
 static void* xmalloc_fatal(size_t size)
