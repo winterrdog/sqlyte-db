@@ -22,11 +22,6 @@
     IN THE SOFTWARE.
 */
 #include "db.h"
-#include "xmem.h"
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 void print_row(row_t* r)
 {
@@ -378,6 +373,7 @@ void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
 {
     void *old_node, *new_node, *dest_node, *dest, *src;
     u32 new_page_num, index_within_node;
+    int i;
 
     /*
         - create a new node and move half of the cells over.
@@ -394,7 +390,7 @@ void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
           between old( left ) and new( right ) nodes.
         - Starting from the right, move each key to the correct position
     */
-    for (int i = LEAF_NODE_MAX_CELLS; i >= 0; --i) {
+    for (i = LEAF_NODE_MAX_CELLS; i >= 0; --i) {
         dest_node = (i >= LEAF_NODE_LEFT_SPLIT_COUNT) ? new_node : old_node;
         index_within_node = i % LEAF_NODE_LEFT_SPLIT_COUNT;
         dest = leaf_node_cell(dest_node, index_within_node);
@@ -550,6 +546,47 @@ u32 get_node_max_key(void* node)
     return key;
 }
 
+cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key)
+{
+    cursor_t* c;
+    u32 num_keys, min_idx, max_idx, mid, key_to_right, child_num;
+    void *node, *child;
+
+    node = get_page(t->pager, page_num);
+    num_keys = *internal_node_num_keys(node);
+
+    // cycle thru keys
+    // binary search to find index of child to search
+    min_idx = 0,
+    max_idx = num_keys; // there's one more child than keys
+
+    // todo: try to change it
+    while (min_idx != max_idx) {
+        mid = min_idx + ((max_idx - min_idx) / 2);
+        key_to_right = *internal_node_key(node, mid);
+
+        if (key > key_to_right)
+            min_idx = mid + 1;
+        else
+            max_idx = mid;
+    }
+
+    // cycle thru children
+    child_num = *internal_node_child(node, min_idx);
+    child = get_page(t->pager, child_num);
+
+    switch (get_node_type(child)) {
+    case NODE_LEAF:
+        c = leaf_node_find(t, child_num, key);
+        break;
+    case NODE_INTERNAL:
+        c = internal_node_find(t, child_num, key);
+        break;
+    }
+
+    return c;
+}
+
 // e n d  o f  B - t r e e
 
 table_t* db_open(const char* fname)
@@ -700,8 +737,7 @@ cursor_t* table_find(table_t* t, u32 key)
         return leaf_node_find(t, root_page_num, key);
     }
 
-    printf("need to implement searching for an internal node\n");
-    exit(EXIT_FAILURE);
+    return internal_node_find(t, root_page_num, key);
 }
 
 execute_result_t exec_insert(statement* st, table_t* t)
@@ -783,6 +819,7 @@ void close_input_buffer(input_buffer_t* in) { xfree(in->buf), xfree(in); }
 
 void run_repl(const char* fname)
 {
+    // todo: deal with all memory leaks
     table_t* table = db_open(fname);
     input_buffer_t* user_input = new_input_buffer();
 

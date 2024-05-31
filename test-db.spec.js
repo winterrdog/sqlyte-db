@@ -6,10 +6,17 @@ describe("database e2e tests", function () {
   });
 
   const runScript = (commands) => {
-    const childProcess = execSync("./sqlyte test.db", {
-      input: commands.join("\n"),
-    });
-    const rawOutput = childProcess.toString();
+    let childProcess, rawOutput;
+
+    try {
+      childProcess = execSync("./sqlyte test.db", {
+        input: commands.join("\n"),
+      });
+      rawOutput = childProcess.toString();
+    } catch (e) {
+      rawOutput = e.stdout.toString();
+    }
+
     return rawOutput.split("\n");
   };
 
@@ -45,7 +52,8 @@ describe("database e2e tests", function () {
     };
 
     const commands = createManyEntries();
-    const commandsExpectedResult = "lyt-db> error: table's full.";
+    const commandsExpectedResult =
+      "lyt-db> need to implement updating parent after splitting";
     const result = runScript(commands);
     expect(result.at(-2)).toEqual(commandsExpectedResult);
   });
@@ -237,7 +245,7 @@ describe("database e2e tests", function () {
       commands.push(`insert ${i} user${i} person${i}@example.com`);
     }
 
-    commands.push(".btree", ".exit\n");
+    commands.push(".btree", "insert 15 user15 person15@example.com", ".exit\n");
     const commandsExpectedResult = [
       "lyt-db> tree:",
       "- internal (size 1)",
@@ -258,6 +266,7 @@ describe("database e2e tests", function () {
       "  - 12",
       "  - 13",
       "  - 14",
+      "lyt-db> executed.",
       "lyt-db> ",
     ];
 

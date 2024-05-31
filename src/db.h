@@ -245,3 +245,4 @@ u32* internal_node_right_child(void* node);
 u32* internal_node_cell(void* node, u32 cell_num);
 u32* internal_node_num_keys(void* node);
 u32* internal_node_key(void* node, u32 key_num);
+cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key);
