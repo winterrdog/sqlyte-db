@@ -50,36 +50,40 @@ void* get_page(pager_t* pager, u32 page_num)
             TABLE_MAX_PAGES);
         exit_db(EXIT_FAILURE);
     }
-    if (!pager->pages[page_num]) {
-        // cache miss. allocate memory and load from file
-        page = xmalloc(PAGE_SIZE);
-        num_pages = pager->file_len / PAGE_SIZE;
 
-        // we might hv saved a partial page at the end of file
-        if (pager->file_len % PAGE_SIZE != 0) {
-            num_pages++;
+    if (pager->pages[page_num] != NULL) {
+        // a cache hit
+        return pager->pages[page_num];
+    }
+
+    // cache miss. allocate memory and load from file
+    page = xcalloc(PAGE_SIZE, 1);
+    num_pages = pager->file_len / PAGE_SIZE;
+
+    // we might hv saved a partial page at the end of file
+    if (pager->file_len % PAGE_SIZE != 0) {
+        num_pages++;
+    }
+
+    // fetch page from file
+    if (page_num <= num_pages) {
+        off = lseek(pager->fd, page_num * PAGE_SIZE, SEEK_SET);
+        if (off < 0) {
+            printf("failed to reposition for the current page.\n");
+            exit_db(EXIT_FAILURE);
         }
 
-        // fetch page from file
-        if (page_num <= num_pages) {
-            off = lseek(pager->fd, page_num * PAGE_SIZE, SEEK_SET);
-            if (off < 0) {
-                printf("failed to reposition for the current page.\n");
-                exit_db(EXIT_FAILURE);
-            }
-
-            bytes_read = read(pager->fd, page, PAGE_SIZE);
-            if (bytes_read < 0) {
-                printf("failed to read in data from file: %d\n", errno);
-                exit_db(EXIT_FAILURE);
-            }
+        bytes_read = read(pager->fd, page, PAGE_SIZE);
+        if (bytes_read < 0) {
+            printf("failed to read in data from file: %d\n", errno);
+            exit_db(EXIT_FAILURE);
         }
+    }
 
-        pager->pages[page_num] = page;
+    pager->pages[page_num] = page;
 
-        if (page_num >= pager->num_pages) {
-            pager->num_pages = page_num + 1;
-        }
+    if (page_num >= pager->num_pages) {
+        pager->num_pages = page_num + 1;
     }
 
     return pager->pages[page_num];
@@ -310,8 +314,9 @@ void print_tree(pager_t* pager, u32 page_num, u32 indentation_level)
 
 void leaf_node_insert(cursor_t* c, u32 key, row_t* value)
 {
-    void* node;
-    u32 num_cells, i;
+    void *node, *src, *dest;
+    u32 num_cells;
+    int i;
 
     node = get_page(c->table->pager, c->page_num);
     num_cells = *leaf_node_num_cells(node);
@@ -322,9 +327,11 @@ void leaf_node_insert(cursor_t* c, u32 key, row_t* value)
 
     if (c->cell_num < num_cells) {
         // make room for new cell
-        for (i = num_cells; i > c->cell_num; --i) {
-            memcpy(leaf_node_cell(node, i), leaf_node_cell(node, i - 1),
-                LEAF_NODE_CELL_SIZE);
+        for (i = num_cells; i > 0 && i > c->cell_num; --i) {
+            src = leaf_node_cell(node, i - 1);
+            dest = leaf_node_cell(node, i);
+
+            memcpy(dest, src, LEAF_NODE_CELL_SIZE);
         }
     }
 
@@ -369,10 +376,11 @@ cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key)
             return c;
         }
 
-        if (key > key_at_mid)
+        if (key > key_at_mid) {
             low = mid + 1;
-        else
+        } else {
             high = mid;
+        }
     }
 
     c->cell_num = low;
@@ -579,10 +587,11 @@ cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key)
             break;
         }
 
-        if (key > key_to_right)
+        if (key > key_to_right) {
             min_idx = mid + 1;
-        else
+        } else {
             max_idx = mid - 1;
+        }
     }
 
     // cycle thru all children
@@ -607,6 +616,7 @@ table_t* db_open(const char* fname)
 {
     table_t* table;
     pager_t* pager;
+    void* root_node;
 
     pager = pager_open(fname);
     table = xmalloc(sizeof(table_t));
@@ -615,7 +625,7 @@ table_t* db_open(const char* fname)
 
     // new db file. initialize page 0 as leaf node
     if (pager->num_pages == 0) {
-        void* root_node = get_page(pager, 0x0);
+        root_node = get_page(pager, 0x0);
         init_leaf_node(root_node);
         set_node_root(root_node, true);
     }
@@ -645,7 +655,8 @@ void db_close(table_t* t)
         exit_db(EXIT_FAILURE);
     }
 
-    xfree(pager), xfree(t);
+    xfree(pager);
+    xfree(t);
 }
 
 input_buffer_t* new_input_buffer(void)
@@ -653,7 +664,9 @@ input_buffer_t* new_input_buffer(void)
     input_buffer_t* ret;
 
     ret = xmalloc(sizeof(input_buffer_t));
-    ret->buf = NULL, ret->input_len = 0, ret->buf_len = 0;
+    ret->buf = NULL;
+    ret->input_len = 0;
+    ret->buf_len = 0;
 
     return ret;
 }
@@ -824,7 +837,7 @@ int read_input(input_buffer_t* in)
     in->input_len = bytes_read - 1;
 
     // remove trailing new-line feed
-    in->buf[bytes_read - 1] = 0;
+    in->buf[bytes_read - 1] = '\0';
 
     return 0;
 }
@@ -886,6 +899,7 @@ void run_repl(const char* fname)
             continue;
         }
 
+        // execute the statement
         switch (exec_statement(&st, table)) {
         case EXECUTE_SUCCESS:
             printf("executed.\n");

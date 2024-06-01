@@ -52,8 +52,8 @@ const char* xstrdup(const char* s);
 /*
 ** Header on the linked list of memory allocations.
 */
-typedef struct mem_blk_hdr mem_blk_hdr_t;
-struct mem_blk_hdr {
+typedef struct mem_blk_hdr_t mem_blk_hdr_t;
+struct mem_blk_hdr_t {
     mem_blk_hdr_t* next_blk;
     size_t blk_size;
     /* actual memory block comes next, right here! */
@@ -62,7 +62,7 @@ struct mem_blk_hdr {
 /*
 ** Global "singly-linked" list of all memory allocations.
 */
-static mem_blk_hdr_t* allocated_memory_list = NULL;
+static mem_blk_hdr_t* memory_blks_list = NULL;
 
 /*
 ** Wrappers around malloc(), calloc(), realloc() and free().
@@ -93,6 +93,11 @@ static inline mem_blk_hdr_t* get_mem_block_header(void* ptr)
     return (((mem_blk_hdr_t*)ptr) - 1);
 }
 
+static inline void* get_mem_block_data(mem_blk_hdr_t* blk_hdr)
+{
+    return (void*)(blk_hdr + 1);
+}
+
 void free_mem(void* ptr)
 {
     if (ptr) {
@@ -116,11 +121,11 @@ void* xmalloc(size_t size)
         return xmalloc_fatal(size);
     }
 
-    new_blk->next_blk = allocated_memory_list;
+    new_blk->next_blk = memory_blks_list;
     new_blk->blk_size = size;
-    allocated_memory_list = new_blk;
+    memory_blks_list = new_blk;
 
-    return (void*)(new_blk + 1);
+    return get_mem_block_data(new_blk);
 }
 
 void* xcalloc(size_t nmemb, size_t size)
@@ -160,7 +165,8 @@ const char* xstrdup(const char* src)
     size_t src_len = strlen(src) + 1;
 
     char* dest = (char*)xmalloc(src_len);
-    memcpy(dest, src, src_len), dest[src_len - 1] = 0;
+    memcpy(dest, src, src_len);
+    dest[src_len - 1] = '\0';
 
     return (const char*)dest;
 }
@@ -176,10 +182,11 @@ void xfree(void* old_blk)
 
 void xfree_all(void)
 {
-    for (mem_blk_hdr_t* next_blk = NULL; allocated_memory_list != NULL;
-         allocated_memory_list = next_blk) {
-        next_blk = allocated_memory_list->next_blk;
-        free_mem(allocated_memory_list);
+    for (mem_blk_hdr_t* next_blk = NULL; memory_blks_list != NULL;) {
+        next_blk = memory_blks_list->next_blk;
+        free_mem(memory_blks_list);
+
+        memory_blks_list = next_blk;
     }
 }
 
