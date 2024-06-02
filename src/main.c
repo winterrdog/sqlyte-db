@@ -117,14 +117,12 @@ cursor_t* table_start(table_t* table)
 {
     cursor_t* cursor;
     u32 num_cells;
-    void* root_node;
+    void* node;
 
-    cursor = xmalloc(sizeof(cursor_t));
-    cursor->table = table, cursor->cell_num = 0x0,
-    cursor->page_num = table->root_page_num;
-
-    root_node = get_page(table->pager, table->root_page_num);
-    num_cells = *leaf_node_num_cells(root_node);
+    cursor = table_find(table, 0x0);
+    node = get_page(table->pager, cursor->page_num);
+    num_cells = *leaf_node_num_cells(node);
+    cursor->table = table;
     cursor->end_of_table = (num_cells == 0);
 
     return cursor;
@@ -143,16 +141,28 @@ void* cursor_value(cursor_t* c)
 
 void cursor_advance(cursor_t* c)
 {
-    u32 page_num;
+    u32 page_num, next_page_num;
     void* node;
 
     page_num = c->page_num;
     node = get_page(c->table->pager, page_num);
     c->cell_num++;
+
     if (c->cell_num < (*leaf_node_num_cells(node))) {
+        // if cursor does not exceed the current leaf's bounds
         return;
     }
-    c->end_of_table = 0x1;
+
+    // advance to the next leaf if we're not at the last leaf otherwise "bust!"
+    if (is_last_leaf_node(node)) {
+        // rightmost leaf hence the end of table
+        c->end_of_table = true;
+    } else {
+        next_page_num = *leaf_node_next_leaf(node);
+
+        c->page_num = next_page_num;
+        c->cell_num = 0;
+    }
 }
 
 pager_t* pager_open(const char* fname)
@@ -222,6 +232,17 @@ void* leaf_node_cell(void* node, u32 cell_num)
     return node + LEAF_NODE_HEADER_SIZE + (cell_num * LEAF_NODE_CELL_SIZE);
 }
 
+bool is_last_leaf_node(void* node)
+{
+    u32 page_num = *leaf_node_next_leaf(node);
+    return page_num == NO_SIBLING;
+}
+
+u32* leaf_node_next_leaf(void* node)
+{
+    return (u32*)(node + LEAF_NODE_NEXT_LEAF_OFFSET);
+}
+
 void init_leaf_node(void* node)
 {
     set_node_type(node, NODE_LEAF);
@@ -229,6 +250,8 @@ void init_leaf_node(void* node)
 
     u32* num_cells = leaf_node_num_cells(node);
     *num_cells = 0x0;
+
+    *leaf_node_next_leaf(node) = NO_SIBLING;
 }
 
 void init_internal_node(void* node)
@@ -389,7 +412,7 @@ cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key)
 
 void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
 {
-    void *old_node, *new_node, *dest_node, *dest, *src;
+    void *old_node, *new_node, *dest_node, *dest, *src, *saved_value;
     u32 new_page_num, index_within_node;
     int i;
 
@@ -403,6 +426,11 @@ void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
     new_node = get_page(c->table->pager, new_page_num);
     init_leaf_node(new_node);
 
+    // setup sibling of the new node to be the "old node's sibling"
+    // and that of the old node to be the "new node"
+    *leaf_node_next_leaf(new_node) = *leaf_node_next_leaf(old_node);
+    *leaf_node_next_leaf(old_node) = new_page_num;
+
     /*
         - all existing keys plus new key should be divided evenly
           between old( left ) and new( right ) nodes.
@@ -414,7 +442,10 @@ void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
         dest = leaf_node_cell(dest_node, index_within_node);
 
         if (i == c->cell_num) {
-            serialize_row(value, dest);
+            saved_value = leaf_node_value(dest_node, index_within_node);
+            serialize_row(value, saved_value);
+
+            *leaf_node_key(dest_node, index_within_node) = key;
             continue;
         }
         if (i > c->cell_num) {

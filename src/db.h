@@ -43,6 +43,9 @@
 // table-related
 #define TABLE_MAX_PAGES 100
 
+// marks a key as not having sibling
+#define NO_SIBLING 0x0
+
 typedef unsigned int u32;
 typedef unsigned char u8;
 
@@ -131,7 +134,7 @@ typedef struct {
     table_t* table;
     u32 page_num;
     u32 cell_num;
-    u8 end_of_table; // indicates a position one past the last element
+    bool end_of_table; // indicates a position one past the last element
 } cursor_t;
 
 // B -T R E E
@@ -154,8 +157,11 @@ const u32 PARENT_POINTER_OFFSET = IS_ROOT_OFFSET + IS_ROOT_SIZE;
 // leaf node header layout
 const u32 LEAF_NODE_NUM_CELLS_SIZE = sizeof(u32);
 const u32 LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
-const u32 LEAF_NODE_HEADER_SIZE
-    = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE;
+const u32 LEAF_NODE_NEXT_LEAF_SIZE = sizeof(u32);
+const u32 LEAF_NODE_NEXT_LEAF_OFFSET
+    = LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE;
+const u32 LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE
+    + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE;
 
 // leaf node body layout
 const u32 LEAF_NODE_KEY_SIZE = sizeof(u32);
@@ -238,6 +244,8 @@ void* leaf_node_value(void* node, u32 cell_num);
 void leaf_node_insert(cursor_t* c, u32 key, row_t* value);
 cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key);
 void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value);
+u32* leaf_node_next_leaf(void* node);
+bool is_last_leaf_node(void* node);
 
 // access and control internal node fields
 void init_internal_node(void* node);
