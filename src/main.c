@@ -567,16 +567,17 @@ u32 get_node_max_key(void* node)
 cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key)
 {
     cursor_t* c;
-    u32 num_keys, mid, key_to_right, child_num;
+    u32 num_keys, key_to_right, child_num;
     void *node, *child;
+    int min_idx, max_idx, mid;
 
     node = get_page(t->pager, page_num);
     num_keys = *internal_node_num_keys(node);
 
     // cycle thru all keys
     // binary search to find index of child to search
-    u32 min_idx = 0;
-    int max_idx = num_keys - 1; // there's one more child than keys
+    min_idx = 0;
+    max_idx = num_keys - 1; // there's one more child than keys
 
     while (min_idx <= max_idx) {
         mid = min_idx + ((max_idx - min_idx) / 2);
