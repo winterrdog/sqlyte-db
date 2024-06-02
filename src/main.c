@@ -30,14 +30,6 @@ void print_row(row_t* r)
 
 // todo: handle common signals cleanly
 
-void exit_db(int status)
-{
-    // free all memory used by the database
-    xfree_all();
-
-    exit(status);
-}
-
 void* get_page(pager_t* pager, u32 page_num)
 {
     void* page;
@@ -48,7 +40,7 @@ void* get_page(pager_t* pager, u32 page_num)
     if (page_num > TABLE_MAX_PAGES) {
         printf("tried to fetch a page out of bounds. %d > %d\n", page_num,
             TABLE_MAX_PAGES);
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     if (pager->pages[page_num] != NULL) {
@@ -70,13 +62,13 @@ void* get_page(pager_t* pager, u32 page_num)
         off = lseek(pager->fd, page_num * PAGE_SIZE, SEEK_SET);
         if (off < 0) {
             printf("failed to reposition for the current page.\n");
-            exit_db(EXIT_FAILURE);
+            exit(EXIT_FAILURE);
         }
 
         bytes_read = read(pager->fd, page, PAGE_SIZE);
         if (bytes_read < 0) {
             printf("failed to read in data from file: %d\n", errno);
-            exit_db(EXIT_FAILURE);
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -177,7 +169,7 @@ pager_t* pager_open(const char* fname)
     fd = open(fname, O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
     if (fd < 0) {
         printf("unable to open file, %d.\n", errno);
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     // set up pager
@@ -185,7 +177,7 @@ pager_t* pager_open(const char* fname)
     if ((file_len % PAGE_SIZE) != 0) {
         printf(
             "db file is not a whole number of pages. Corrupt database file.\n");
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     pager = xmalloc(sizeof(pager_t));
@@ -205,19 +197,19 @@ void pager_flush(pager_t* pager, u32 page_num)
 
     if (!pager->pages[page_num]) {
         printf("tried to flush null page\n");
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     offset = lseek(pager->fd, page_num * PAGE_SIZE, SEEK_SET);
     if (offset < 0) {
         printf("failed to reposition for the current page, %d.\n", errno);
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     bytes_written = write(pager->fd, pager->pages[page_num], PAGE_SIZE);
     if (bytes_written < 0) {
         perror("error writing page cache to disk:");
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -467,7 +459,7 @@ void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
         return create_new_root(c->table, new_page_num);
     } else {
         printf("need to implement updating parent after splitting\n");
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -547,7 +539,7 @@ u32* internal_node_child(void* node, u32 child_num)
         printf("tried to access a child that's out-of-bounds. child_num %d > "
                "num_keys %d\n",
             child_num, num_keys);
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
     if (child_num == num_keys) { // right child
         return internal_node_right_child(node);
@@ -684,7 +676,7 @@ void db_close(table_t* t)
     result = close(pager->fd);
     if (result < 0) {
         printf("error closing database.\n");
-        exit_db(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
 
     xfree(pager);
@@ -716,7 +708,7 @@ meta_cmd_result_t exec_meta_cmd(input_buffer_t* in, table_t* t)
     if (str_exactly_equal(in->buf, ".exit")) {
         close_input_buffer(in);
         db_close(t);
-        exit_db(EXIT_SUCCESS);
+        exit(EXIT_SUCCESS);
     } else if (str_exactly_equal(in->buf, ".btree")) {
         printf("tree:\n");
         print_tree(t->pager, 0, 0);
@@ -957,6 +949,7 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    atexit(xfree_all);
     fname = argv[1];
     run_repl(fname);
 
