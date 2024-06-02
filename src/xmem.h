@@ -77,11 +77,9 @@ static mem_blk_hdr_t* memory_blks_list = NULL;
 */
 static void* xmalloc_fatal(size_t size)
 {
-    if (size == 0)
+    if (size == 0) {
         return NULL;
-
-    // free all memory allocations
-    xfree_all();
+    }
 
     fprintf(stderr, "Out of memory. Failed to allocate %zd bytes. exiting..!\n",
         size);
