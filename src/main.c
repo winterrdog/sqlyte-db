@@ -277,7 +277,7 @@ void print_constants(void)
 
 void indent(u32 level)
 {
-    char* spaces = xmalloc(level + 1);
+    char spaces[level + 1];
 
     for (u32 i = 0; i != level; ++i) {
         spaces[i] = ' ';
@@ -285,8 +285,6 @@ void indent(u32 level)
 
     spaces[level] = '\0';
     printf("%s", spaces);
-
-    xfree(spaces);
 }
 
 void print_tree(pager_t* pager, u32 page_num, u32 indentation_level)
@@ -370,8 +368,9 @@ void set_node_type(void* node, node_type_t type)
 cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key)
 {
     void* node;
-    u32 num_cells, mid, key_at_mid, low, high;
+    u32 num_cells, key_at_mid;
     cursor_t* c;
+    int mid, low, high;
 
     node = get_page(t->pager, page_num);
     num_cells = *leaf_node_num_cells(node);
@@ -949,7 +948,9 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    // register cleanup function
     atexit(xfree_all);
+
     fname = argv[1];
     run_repl(fname);
 
