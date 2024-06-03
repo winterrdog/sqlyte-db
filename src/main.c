@@ -28,8 +28,6 @@ void print_row(row_t* r)
     printf("( %d, %s, %s )\n", r->id, r->username, r->email);
 }
 
-// todo: handle common signals cleanly
-
 void* get_page(pager_t* pager, u32 page_num)
 {
     void* page;
