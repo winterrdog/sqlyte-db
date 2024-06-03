@@ -203,6 +203,7 @@ void* get_page(pager_t* pager, u32 page_num);
 void serialize_row(row_t* src, void* dest);
 void deserialize_row(void* src, row_t* dest);
 void print_prompt(void);
+void print_help(void);
 int read_input(input_buffer_t* in);
 void run_repl(const char* fname);
 void cursor_advance(cursor_t* c);

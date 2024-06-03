@@ -700,6 +700,26 @@ u8 str_exactly_equal(const char* s1, const char* s2)
     return len1 == len2 && (strncmp(s1, s2, len1) == 0);
 }
 
+void print_help(void)
+{
+    // SQL commands
+    printf("SQL commands supported:\n");
+    printf("\tinsert <id> <username> <email> insert a new row into the "
+           "database. That is the currently supported schema.\n");
+    printf("\tselect                         select all rows from the "
+           "database.\n");
+    printf("\n\tNOTE: all SQL commands should be in lower case.\n\n");
+
+    // meta commands
+    printf("database meta-commands:\n");
+    printf("\t.exit      exit the db.\n");
+    printf("\t.btree     print the current in-memory b-tree structure for the "
+           "database.\n");
+    printf("\t.constants print the constants to help understand the db file "
+           "format and debugging purposes.\n");
+    printf("\t.help      print this help message.\n");
+}
+
 meta_cmd_result_t exec_meta_cmd(input_buffer_t* in, table_t* t)
 {
     if (str_exactly_equal(in->buf, ".exit")) {
@@ -713,6 +733,9 @@ meta_cmd_result_t exec_meta_cmd(input_buffer_t* in, table_t* t)
     } else if (str_exactly_equal(in->buf, ".constants")) {
         printf("constants:\n");
         print_constants();
+        return META_CMD_SUCCESS;
+    } else if (str_exactly_equal(in->buf, ".help")) {
+        print_help();
         return META_CMD_SUCCESS;
     }
 
@@ -882,7 +905,7 @@ void run_repl(const char* fname)
         print_prompt();
         int ret = read_input(user_input);
         if (ret < 0) {
-            return;
+            goto cleanup;
         }
 
         if (!user_input->buf[0]) {
@@ -933,6 +956,9 @@ void run_repl(const char* fname)
             break;
         }
     } while (1);
+
+cleanup:
+    close_input_buffer(user_input);
 }
 
 int main(int argc, char* argv[])
