@@ -399,10 +399,12 @@ cursor_t* leaf_node_find(table_t* t, u32 page_num, u32 key)
     return c;
 }
 
+u32* node_parent(void* node) { return node + PARENT_POINTER_OFFSET; }
+
 void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
 {
     void *old_node, *new_node, *dest_node, *dest, *src, *saved_value;
-    u32 new_page_num, index_within_node;
+    u32 new_page_num, index_within_node, old_max;
     int i;
 
     /*
@@ -411,9 +413,13 @@ void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
         - update the parent or create a new parent
     */
     old_node = get_page(c->table->pager, c->page_num);
+    old_max = get_node_max_key(old_node);
     new_page_num = get_unused_page_num(c->table->pager);
     new_node = get_page(c->table->pager, new_page_num);
     init_leaf_node(new_node);
+
+    // the old node's parent is the new node's parent too
+    *node_parent(new_node) = *node_parent(old_node);
 
     // setup sibling of the new node to be the "old node's sibling"
     // and that of the old node to be the "new node"
@@ -455,9 +461,20 @@ void leaf_node_split_and_insert(cursor_t* c, u32 key, row_t* value)
     if (is_node_root(old_node)) {
         return create_new_root(c->table, new_page_num);
     } else {
-        printf("need to implement updating parent after splitting\n");
-        exit(EXIT_FAILURE);
+        u32 parent_page_num = *node_parent(old_node);
+        u32 new_max = get_node_max_key(old_node);
+        void* parent = get_page(c->table->pager, parent_page_num);
+
+        update_internal_node_key(parent, old_max, new_max);
+        internal_node_insert(c->table, parent_page_num, new_page_num);
     }
+}
+
+void update_internal_node_key(void* node, u32 old_key, u32 new_key)
+{
+    // overwrite the old key with the new key
+    u32 old_child_idx = internal_node_find_child(node, old_key);
+    *internal_node_key(node, old_child_idx) = new_key;
 }
 
 /*
@@ -520,11 +537,29 @@ void create_new_root(table_t* t, u32 right_child_page_num)
     left_child_max_key = get_node_max_key(left_child);
     *internal_node_key(root, 0x0) = left_child_max_key;
     *internal_node_right_child(root) = right_child_page_num;
+
+    // update parent of children
+    *node_parent(left_child) = t->root_page_num;
+    *node_parent(right_child) = t->root_page_num;
 }
 
 u32* internal_node_key(void* node, u32 key_num)
 {
-    return internal_node_cell(node, key_num) + INTERNAL_NODE_CHILD_SIZE;
+    /*
+        I could have used "void*" for node_cell's type but that's NOT
+        allowed in the C standard because "void" is an incomplete type but of
+        course it'd work with Clang, GCC and ICC( MSVC won't allow, it's mob
+        loyal ). So for portability i forcefully casted it to a byte(unsigned
+        char) pointer because i wanted to move a certain amount of bytes
+        forwards.
+
+        see: https://stackoverflow.com/a/3524270/16357751
+
+        So don't mind any pedantic warnings from the compiler about incompatible
+        pointers. Shxt works! duh!
+    */
+    u8* node_cell = internal_node_cell(node, key_num);
+    return node_cell + INTERNAL_NODE_CHILD_SIZE;
 }
 
 u32* internal_node_child(void* node, u32 child_num)
@@ -584,26 +619,25 @@ u32 get_node_max_key(void* node)
     return key;
 }
 
-cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key)
+u32 internal_node_find_child(void* node, u32 key)
 {
-    cursor_t* c;
-    u32 num_keys, key_to_right, child_num;
-    void *node, *child;
-    int min_idx, max_idx, mid;
-
-    node = get_page(t->pager, page_num);
-    num_keys = *internal_node_num_keys(node);
+    /*
+        return the index of the child which should
+        contain the given key
+    */
+    u32 num_keys, min_idx, max_idx, mid, key_to_right;
 
     // cycle thru all keys
-    // binary search to find index of child to search
-    min_idx = 0;
-    max_idx = num_keys - 1; // there's one more child than keys
+    num_keys = *internal_node_num_keys(node);
 
-    while (min_idx <= max_idx) {
-        mid = min_idx + ((max_idx - min_idx) / 2);
+    // todo: if bug happens, check these for signedness
+    // binary search, bro! we used the "closed-interval" variation( not ya
+    // usual! )
+    for (min_idx = 0x0, max_idx = num_keys; min_idx != max_idx;) {
+        mid = (max_idx + min_idx) / 2;
         key_to_right = *internal_node_key(node, mid);
 
-        if (key == key_to_right) {
+        if (key_to_right == key) {
             min_idx = mid;
             break;
         }
@@ -611,12 +645,25 @@ cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key)
         if (key > key_to_right) {
             min_idx = mid + 1;
         } else {
-            max_idx = mid - 1;
+            max_idx = mid;
         }
     }
 
+    return min_idx;
+}
+
+cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key)
+{
+    cursor_t* c;
+    u32 child_index, child_num;
+    void *node, *child;
+
+    node = get_page(t->pager, page_num);
+
+    child_index = internal_node_find_child(node, key);
+    child_num = *internal_node_child(node, child_index);
+
     // cycle thru all children
-    child_num = *internal_node_child(node, min_idx);
     child = get_page(t->pager, child_num);
 
     switch (get_node_type(child)) {
@@ -629,6 +676,51 @@ cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key)
     }
 
     return c;
+}
+
+void internal_node_insert(table_t* t, u32 parent_page_num, u32 child_page_num)
+{
+    // Add a new child/key pair to parent that corresponds to child
+    void *parent, *child, *right_child, *dest, *src;
+    u32 child_max_key, index, original_num_keys, right_child_page_num,
+        right_child_max_key, i;
+
+    parent = get_page(t->pager, parent_page_num);
+    child = get_page(t->pager, child_page_num);
+
+    child_max_key = get_node_max_key(child);
+    index = internal_node_find_child(parent, child_max_key);
+
+    original_num_keys = *internal_node_num_keys(parent);
+    *internal_node_num_keys(parent) = original_num_keys + 1;
+
+    if (original_num_keys >= INTERNAL_NODE_MAX_CELLS) {
+        printf("need to implement splitting internal node\n");
+        exit(EXIT_FAILURE);
+    }
+
+    right_child_page_num = *internal_node_right_child(parent);
+    right_child = get_page(t->pager, right_child_page_num);
+
+    // if the new child is the rightmost child
+    if (child_max_key > get_node_max_key(right_child)) {
+        // replace right child by doing a swap of left kid with right one
+        right_child_max_key = get_node_max_key(right_child);
+
+        *internal_node_child(parent, original_num_keys) = right_child_page_num;
+        *internal_node_key(parent, original_num_keys) = right_child_max_key;
+        *internal_node_right_child(parent) = child_page_num;
+    } else {
+        // make room for new cell
+        for (i = original_num_keys; i > index; --i) {
+            dest = internal_node_cell(parent, i);
+            src = internal_node_cell(parent, i - 1);
+
+            memcpy(dest, src, INTERNAL_NODE_CELL_SIZE);
+        }
+        *internal_node_child(parent, index) = child_page_num;
+        *internal_node_key(parent, index) = child_max_key;
+    }
 }
 
 // e n d  o f  B - t r e e
@@ -897,6 +989,8 @@ void close_input_buffer(input_buffer_t* in)
 
 void run_repl(const char* fname)
 {
+    char* err_msg = NULL;
+
     table_t* table = db_open(fname);
     input_buffer_t* user_input = new_input_buffer();
 
@@ -914,11 +1008,14 @@ void run_repl(const char* fname)
 
         // is it a meta command
         if (user_input->buf[0] == '.') {
+            err_msg = "unrecognized meta command '%s'. use '.help' for "
+                      "a list of supported meta commands.\n";
+
             switch (exec_meta_cmd(user_input, table)) {
             case META_CMD_SUCCESS:
                 continue;
             case META_CMD_UNRECOGNIZED_CMD:
-                PRINT_TO_STDERR("unrecognized command '%s'\n", user_input->buf);
+                PRINT_TO_STDERR(err_msg, user_input->buf);
                 continue;
             }
         }
@@ -933,7 +1030,10 @@ void run_repl(const char* fname)
                 "syntax error. could not parse statement.\n");
             continue;
         case PREPARE_UNRECOGNIZED_STATEMENT:
-            printf("unrecognized keyword at start of '%s'.\n", user_input->buf);
+            err_msg = "unrecognized keyword at start of '%s'. use '.help' for "
+                      "a list of supported SQL commands.\n";
+
+            printf(err_msg, user_input->buf);
             continue;
         case PREPARE_NEGATIVE_ID:
             printf("id must be non-negative.\n");

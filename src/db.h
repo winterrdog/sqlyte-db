@@ -191,6 +191,7 @@ const u32 INTERNAL_NODE_KEY_SIZE = sizeof(u32);
 const u32 INTERNAL_NODE_CHILD_SIZE = sizeof(u32);
 const u32 INTERNAL_NODE_CELL_SIZE
     = INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE;
+const u32 INTERNAL_NODE_MAX_CELLS = 3; // keep it small for now
 
 // E N D
 // O F
@@ -232,6 +233,7 @@ void set_node_type(void* node, node_type_t type);
 bool is_node_root(void* node);
 void set_node_root(void* node, bool is_root);
 u32 get_node_max_key(void* node);
+u32* node_parent(void* node);
 void indent(u32 level);
 void print_tree(pager_t* pager, u32 page_num, u32 indentation_level);
 
@@ -255,3 +257,6 @@ u32* internal_node_cell(void* node, u32 cell_num);
 u32* internal_node_num_keys(void* node);
 u32* internal_node_key(void* node, u32 key_num);
 cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key);
+void update_internal_node_key(void* node, u32 old_key, u32 new_key);
+u32 internal_node_find_child(void* node, u32 key);
+void internal_node_insert(table_t* t, u32 parent_page_num, u32 child_page_num);
