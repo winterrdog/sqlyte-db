@@ -81,8 +81,7 @@ static void* xmalloc_fatal(size_t size)
         return NULL;
     }
 
-    fprintf(stderr, "Out of memory. Failed to allocate %zd bytes. exiting..!\n",
-        size);
+    fprintf(stderr, "Out of memory. Failed to allocate %zd bytes. exiting..!\n", size);
     exit(1);
 }
 

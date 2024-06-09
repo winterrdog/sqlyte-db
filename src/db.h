@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +46,8 @@
 
 // marks a key as not having sibling
 #define NO_SIBLING 0x0
+
+#define INVALID_PAGE_NUM UINT32_MAX
 
 typedef unsigned int u32;
 typedef unsigned char u8;
@@ -93,10 +96,7 @@ typedef struct {
 */
 // enum to handle meta commands i.e. cmds that are not SQL but
 // help with controlling the database engine like ".exit"
-typedef enum {
-    META_CMD_SUCCESS = 0,
-    META_CMD_UNRECOGNIZED_CMD
-} meta_cmd_result_t;
+typedef enum { META_CMD_SUCCESS = 0, META_CMD_UNRECOGNIZED_CMD } meta_cmd_result_t;
 
 /*
     types to track the state of SQL statements in SQL database
@@ -146,8 +146,7 @@ typedef enum { NODE_INTERNAL, NODE_LEAF } node_type_t;
 const u32 NODE_TYPE_SIZE = sizeof(u8);
 const u32 IS_ROOT_SIZE = sizeof(u8);
 const u32 PARENT_POINTER_SIZE = sizeof(u32);
-const u8 COMMON_NODE_HEADER_SIZE
-    = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
+const u8 COMMON_NODE_HEADER_SIZE = NODE_TYPE_SIZE + IS_ROOT_SIZE + PARENT_POINTER_SIZE;
 
 // offsets
 const u32 NODE_TYPE_OFFSET = 0x0;
@@ -160,8 +159,8 @@ const u32 LEAF_NODE_NUM_CELLS_OFFSET = COMMON_NODE_HEADER_SIZE;
 const u32 LEAF_NODE_NEXT_LEAF_SIZE = sizeof(u32);
 const u32 LEAF_NODE_NEXT_LEAF_OFFSET
     = LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE;
-const u32 LEAF_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE
-    + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE;
+const u32 LEAF_NODE_HEADER_SIZE
+    = COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE;
 
 // leaf node body layout
 const u32 LEAF_NODE_KEY_SIZE = sizeof(u32);
@@ -183,15 +182,14 @@ const u32 INTERNAL_NODE_NUM_KEYS_OFFSET = COMMON_NODE_HEADER_SIZE;
 const u32 INTERNAL_NODE_RIGHT_CHILD_SIZE = sizeof(u32);
 const u32 INTERNAL_NODE_RIGHT_CHILD_OFFSET
     = INTERNAL_NODE_NUM_KEYS_OFFSET + INTERNAL_NODE_NUM_KEYS_SIZE;
-const u32 INTERNAL_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE
-    + INTERNAL_NODE_NUM_KEYS_SIZE + INTERNAL_NODE_RIGHT_CHILD_SIZE;
+const u32 INTERNAL_NODE_HEADER_SIZE = COMMON_NODE_HEADER_SIZE + INTERNAL_NODE_NUM_KEYS_SIZE
+    + INTERNAL_NODE_RIGHT_CHILD_SIZE;
 
 // internal node body layout
 const u32 INTERNAL_NODE_KEY_SIZE = sizeof(u32);
 const u32 INTERNAL_NODE_CHILD_SIZE = sizeof(u32);
-const u32 INTERNAL_NODE_CELL_SIZE
-    = INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE;
-const u32 INTERNAL_NODE_MAX_CELLS = 3; // keep it small for now
+const u32 INTERNAL_NODE_CELL_SIZE = INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE;
+const u32 INTERNAL_NODE_MAX_KEYS = 3; // keep it small for now
 
 // E N D
 // O F
@@ -232,7 +230,7 @@ node_type_t get_node_type(void* node);
 void set_node_type(void* node, node_type_t type);
 bool is_node_root(void* node);
 void set_node_root(void* node, bool is_root);
-u32 get_node_max_key(void* node);
+u32 get_node_max_key(pager_t* pager, void* node);
 u32* node_parent(void* node);
 void indent(u32 level);
 void print_tree(pager_t* pager, u32 page_num, u32 indentation_level);
@@ -251,7 +249,7 @@ bool is_last_leaf_node(void* node);
 
 // access and control internal node fields
 void init_internal_node(void* node);
-u32* internal_node_child(void* node, u32 child_num);
+u32* internal_node_left_child(void* node, u32 child_num);
 u32* internal_node_right_child(void* node);
 u32* internal_node_cell(void* node, u32 cell_num);
 u32* internal_node_num_keys(void* node);
@@ -260,3 +258,4 @@ cursor_t* internal_node_find(table_t* t, u32 page_num, u32 key);
 void update_internal_node_key(void* node, u32 old_key, u32 new_key);
 u32 internal_node_find_child(void* node, u32 key);
 void internal_node_insert(table_t* t, u32 parent_page_num, u32 child_page_num);
+void internal_node_split_and_insert(table_t* t, u32 parent_page_num, u32 child_page_num);
