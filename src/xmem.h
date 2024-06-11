@@ -41,13 +41,13 @@
 #include <sys/types.h>
 
 /* Prototypes for functions */
-void* xmalloc(size_t size);
-void* xcalloc(size_t nmemb, size_t size);
-void* xrealloc(void* ptr, size_t size);
-void xfree(void* p);
-void xfree_all(void);
-void free_mem(void* p);
-const char* xstrdup(const char* s);
+// void* xmalloc(size_t size);
+// void* xcalloc(size_t nmemb, size_t size);
+// void* xrealloc(void* ptr, size_t size);
+// void xfree(void* p);
+// void xfree_all(void);
+// void free_mem(void* p);
+// const char* xstrdup(const char* s);
 
 /*
 ** Header on the linked list of memory allocations.
@@ -95,7 +95,7 @@ static inline void* get_mem_block_data(mem_blk_hdr_t* blk_hdr)
     return (void*)(blk_hdr + 1);
 }
 
-void free_mem(void* ptr)
+static void free_mem(void* ptr)
 {
     if (ptr) {
         free(ptr);
@@ -103,7 +103,7 @@ void free_mem(void* ptr)
     }
 }
 
-void* xmalloc(size_t size)
+static void* xmalloc(size_t size)
 {
     mem_blk_hdr_t* new_blk;
     size_t needed_space;
@@ -125,7 +125,7 @@ void* xmalloc(size_t size)
     return get_mem_block_data(new_blk);
 }
 
-void* xcalloc(size_t nmemb, size_t size)
+static void* xcalloc(size_t nmemb, size_t size)
 {
     void* new_blk;
     size_t needed_space;
@@ -137,7 +137,7 @@ void* xcalloc(size_t nmemb, size_t size)
     return new_blk;
 }
 
-void* xrealloc(void* old_ptr, size_t size)
+static void* xrealloc(void* old_ptr, size_t size)
 {
     void* new_blk;
     mem_blk_hdr_t* blk_hdr;
@@ -157,7 +157,7 @@ void* xrealloc(void* old_ptr, size_t size)
     return new_blk;
 }
 
-const char* xstrdup(const char* src)
+static const char* xstrdup(const char* src)
 {
     size_t src_len = strlen(src) + 1;
 
@@ -169,7 +169,7 @@ const char* xstrdup(const char* src)
 }
 
 // make sure u free memory allocated by xmalloc, xcalloc, xrealloc
-void xfree(void* old_blk)
+static void xfree(void* old_blk)
 {
     if (old_blk) {
         mem_blk_hdr_t* blk_hdr = get_mem_block_header(old_blk);
@@ -177,7 +177,7 @@ void xfree(void* old_blk)
     }
 }
 
-void xfree_all(void)
+static void xfree_all(void)
 {
     for (mem_blk_hdr_t* next_blk = NULL; memory_blks_list != NULL;) {
         next_blk = memory_blks_list->next_blk;
