@@ -23,6 +23,27 @@
 */
 #include "db.h"
 
+// todo: implement deleting records
+
+int main(int argc, char* argv[])
+{
+    const char* fname;
+
+    if (argc != 2) {
+        printf("you must supply a database filename.\n");
+        printf("usage: %s <db_file>\n", argv[0]);
+
+        return EXIT_FAILURE;
+    }
+
+    // register cleanup function
+    atexit(xfree_all);
+
+    fname = argv[1], run_repl(fname);
+
+    return EXIT_SUCCESS;
+}
+
 void print_row(row_t* r) { printf("( %d, %s, %s )\n", r->id, r->username, r->email); }
 
 void* get_page(pager_t* pager, u32 page_num)
@@ -1221,24 +1242,4 @@ void run_repl(const char* fname)
 
 cleanup:
     close_input_buffer(user_input);
-}
-
-int main(int argc, char* argv[])
-{
-    const char* fname;
-
-    if (argc != 2) {
-        printf("you must supply a database filename.\n");
-        printf("usage: %s <db_file>\n", argv[0]);
-
-        return EXIT_FAILURE;
-    }
-
-    // register cleanup function
-    atexit(xfree_all);
-
-    fname = argv[1];
-    run_repl(fname);
-
-    return EXIT_SUCCESS;
 }
