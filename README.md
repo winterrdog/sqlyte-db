@@ -33,7 +33,9 @@ A simple database like SQLite that can do stuff. It's not a basic one but rather
 
   To get more help on how to use the database, type `.help` in the database shell.
 
-- You can also view it in action [here](https://asciinema.org/a/663557) _if you don't want to clone the repository_.
+  - You can also view it in action [here](https://asciinema.org/a/663557) 
+  [![asciicast](https://asciinema.org/a/663557.svg)](https://asciinema.org/a/663557)
+  _if you don't want to clone the repository_.
 
 ## Testing
 
